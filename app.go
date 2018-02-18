@@ -12,7 +12,7 @@ import (
 	"io/ioutil"
 )
 
-var MaxInserts = 10
+var MaxInserts = 100
 
 func makeUrl(host string, path string) string {
 	return host + path
