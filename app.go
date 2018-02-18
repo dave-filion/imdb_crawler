@@ -10,6 +10,9 @@ import (
 	url2 "net/url"
 	"encoding/json"
 	"io/ioutil"
+	"github.com/jmoiron/sqlx"
+	_"github.com/lib/pq"
+	"time"
 )
 
 var MaxInserts = 100
@@ -19,10 +22,12 @@ func makeUrl(host string, path string) string {
 }
 
 type Film struct {
-	name        string
-	titleYear   string
-	url        string
-	runningTime string
+	Id          int       `db:"id"`
+	FilmName        string    `db:"film_name"`
+	YearReleased   string    `db:"year_released"`
+	URL         string    `db:"url"`
+	RunningTime string    `db:"running_time"`
+	CreatedAt   time.Time `db:"created_at"`
 }
 
 func alreadyVisited(url string, visited *map[string]Film) bool {
@@ -38,7 +43,44 @@ type LastRunLinksData struct {
 	Links []string `json:"links"`
 }
 
+func connectToDb() *sqlx.DB {
+	db, err := sqlx.Connect("postgres", "dbname=immb sslmode=disable")
+	if err != nil {
+		log.Fatal(err)
+	}
+	return db
+}
+
+func InsertFilm(film Film, db *sqlx.DB) {
+	now := time.Now()
+	film.CreatedAt = now
+	log.Println("inserting: ", film)
+	_, err := db.NamedExec(`INSERT INTO films (film_name, year_released, url, running_time, created_at) 
+		VALUES (:film_name, :year_released, :url, :running_time, :created_at)`, &film)
+	if err != nil {
+		log.Fatal("error inserting film", err)
+	}
+}
+
+func CreateFilmTable(db *sqlx.DB) {
+	_, err := db.Exec(`CREATE TABLE films 
+							(id serial, 
+							film_name text, 
+							year_released text, 
+							url text, 
+							running_time text, 
+							created_at timestamp)`)
+	if err != nil {
+		log.Println("Table already exists, continuing")
+	}
+}
+
+func 
+
 func main() {
+	db := connectToDb()
+	CreateFilmTable(db)
+
 	log.Println("Starting crawler")
 	host := "http://www.imdb.com"
 
@@ -97,7 +139,7 @@ func main() {
 			name := rec[1]
 			year := rec[2]
 			runTime := rec[3]
-			film := Film{name, year, url, runTime}
+			film := Film{0, name, year, url, runTime, time.Now()}
 			visitedMap[url] = film
 		}
 		log.Println(visitedMap)
@@ -121,10 +163,10 @@ func main() {
 
 		visited, film, newLinks := processUrl(url, &visitedMap)
 		if !visited {
-			log.Println("------------------", film.name, "-------------------")
+			log.Println("------------------", film.FilmName, "-------------------")
 
-			// write film data in csv
-			csvWriter.Write([]string{url, film.name, film.titleYear, film.runningTime})
+			// write film data in csv or database
+			InsertFilm(film, db)
 			// add new links to the end of links
 			for _, newLink := range newLinks {
 				if !alreadyVisited(newLink, &visitedMap) {
@@ -188,10 +230,12 @@ func processUrl(url string, visited *map[string]Film) (v bool, film Film, links 
 		// Trim year off the end of title
 		nameOnly := strings.TrimSpace(strings.TrimSuffix(nameWithYear, titleYear))
 		film = Film{
+			0,
 			nameOnly,
 			titleYear,
 			url,
 			runningTime,
+			time.Now(),
 		}
 	})
 
